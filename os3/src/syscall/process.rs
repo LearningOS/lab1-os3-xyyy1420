@@ -2,8 +2,8 @@
 
 use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
 use crate::task::{
-    current_task_id, exit_current_and_run_next, suspend_current_and_run_next, task_status,
-    TaskStatus,
+    cur_task_scall_time, current_task_id, exit_current_and_run_next, suspend_current_and_run_next,
+    task_status, TaskStatus,
 };
 use crate::timer::{get_time, get_time_ms, get_time_us};
 
@@ -48,13 +48,14 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     let task_id = current_task_id();
-    let status = task_status(task_id);
-    let sys_time = get_time();
-    // let scall_time = cur_task_scall_time(task_id);
+    println!("get task id {}",&task_id);
+    let status = task_status();
+    let sys_time = get_time_ms();
+    println!("get task time {}",&sys_time);
     unsafe {
-        // (*ti).status = status;
-        // (*ti).syscall_times = cur_task_scall_time(task_id);
-        // (*ti).time = sys_time;
+        (*ti).status = status;
+        (*ti).syscall_times = cur_task_scall_time(task_id);
+        (*ti).time = sys_time;
     }
-    1
+    0
 }

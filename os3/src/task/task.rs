@@ -9,6 +9,7 @@ use super::TaskContext;
 pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     pub task_cx: TaskContext,
+    pub scall_time: [u32; MAX_SYSCALL_NUM],
     // LAB1: Add whatever you need about the Task.
 }
 

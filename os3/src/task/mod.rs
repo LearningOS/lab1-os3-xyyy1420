@@ -26,8 +26,6 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 
-use alloc::boxed::Box;
-
 /// The task manager, where all the tasks are managed.
 ///
 /// Functions implemented on `TaskManager` deals with all task state transitions
@@ -59,6 +57,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            scall_time:[0;MAX_SYSCALL_NUM],
         }; MAX_APP_NUM];
         for (i, t) in tasks.iter_mut().enumerate().take(num_app) {
             t.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -86,8 +85,8 @@ impl TaskManager {
         let task0 = &mut inner.tasks[0];
         task0.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
-        drop(inner);
         let mut _unused = TaskContext::zero_init();
+        drop(inner);
         // before this, we should drop local variables that must be dropped manually
         unsafe {
             __switch(&mut _unused as *mut TaskContext, next_task_cx_ptr);
@@ -100,6 +99,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
         inner.tasks[current].task_status = TaskStatus::Ready;
+        drop(inner);
     }
 
     /// Change the status of current `Running` task into `Exited`.
@@ -107,6 +107,7 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
         inner.tasks[current].task_status = TaskStatus::Exited;
+        drop(inner);
     }
 
     /// Find next task to run and return task id.
@@ -142,25 +143,27 @@ impl TaskManager {
     }
 
     fn current_task(&self) -> usize {
-        self.inner.exclusive_access().current_task
+        self.inner.only_borrow().current_task
+
     }
-    fn current_task_status(&self, id: usize) -> TaskStatus {
-        let inner = self.inner.exclusive_access();
-        let cur_task = inner.tasks[id];
+    fn current_task_status(&self) -> TaskStatus {
+        let inner = self.inner.only_borrow();
+        let cur_task = &inner.tasks[self.current_task()];
         cur_task.task_status
     }
 
-    // fn occur_scall(&self, syscall_id: usize) {
-    //     let inner = self.inner.exclusive_access();
-    //     let cur_task = inner.tasks[self.current_task()];
-    //     cur_task.scall_time[syscall_id];
-    // }
+    fn occur_scall(&self, syscall_id: usize,task_id:usize) {
+        let mut inner = self.inner.exclusive_access();
+        let cur_task = &mut inner.tasks[task_id];
+        cur_task.scall_time[syscall_id] += 1;
+        drop(inner);
+    }
 
-    // fn current_task_scall_times(&self, id: usize) -> [u32; 10] {
-    //     let inner = self.inner.exclusive_access();
-    //     let cur_task = inner.tasks[id];
-    //     cur_task.scall_time
-    // }
+    fn current_task_scall_times(&self, id: usize) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.only_borrow();
+        let cur_task = &inner.tasks[id];
+        cur_task.scall_time
+    }
 
     // LAB1: Try to implement your function to update or get task info!
 }
@@ -169,8 +172,8 @@ pub fn current_task_id() -> usize {
     TASK_MANAGER.current_task()
 }
 
-pub fn task_status(id: usize) -> TaskStatus {
-    TASK_MANAGER.current_task_status(id)
+pub fn task_status() -> TaskStatus {
+    TASK_MANAGER.current_task_status()
 }
 
 /// Run the first task in task list.
@@ -178,13 +181,13 @@ pub fn run_first_task() {
     TASK_MANAGER.run_first_task();
 }
 
-// pub fn occur_scall(syscall_id: usize) {
-//     TASK_MANAGER.occur_scall(syscall_id);
-// }
+pub fn occur_scall(syscall_id: usize,task_id: usize) {
+    TASK_MANAGER.occur_scall(syscall_id,task_id);
+}
 
-// pub fn cur_task_scall_time(id: usize) -> [u32; 10] {
-//     TASK_MANAGER.current_task_scall_times(id)
-// }
+pub fn cur_task_scall_time(id: usize) -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.current_task_scall_times(id)
+}
 
 /// Switch current `Running` task to the task we have found,
 /// or there is no `Ready` task and we can exit with all applications completed
